@@ -4,6 +4,7 @@ import pandas as pd
 from skill_data import ROLE_SKILLS
 from gap_analyzer import calculate_skill_gap
 from roadmap import generate_roadmap
+from ai_advisor import generate_ai_advice
 
 
 # --------------------------------------------------
@@ -25,13 +26,12 @@ st.title("🤖 AI Skill Gap Navigator")
 
 st.write(
     "Analyze your current skills, identify missing skills "
-    "for your target job role, and generate a personalized "
-    "learning roadmap."
+    "for your target job role, and get AI-powered career guidance."
 )
 
 
 # --------------------------------------------------
-# SIDEBAR
+# SIDEBAR - STUDENT PROFILE
 # --------------------------------------------------
 
 st.sidebar.header("🎓 Student Profile")
@@ -77,7 +77,6 @@ target_role = st.selectbox(
     list(ROLE_SKILLS.keys())
 )
 
-
 target_skills = ROLE_SKILLS[target_role]
 
 
@@ -103,7 +102,8 @@ for index, skill in enumerate(target_skills.keys()):
             skill,
             min_value=0,
             max_value=10,
-            value=0
+            value=0,
+            key=f"skill_{skill}"
         )
 
         student_skills[skill] = level
@@ -118,100 +118,145 @@ if st.button(
     use_container_width=True
 ):
 
-    if not name:
+    if not name.strip():
+
         st.warning("Please enter your name.")
 
     else:
 
-        # Calculate gap
+        # --------------------------------------------------
+        # CALCULATE SKILL GAP
+        # --------------------------------------------------
+
         gap_results = calculate_skill_gap(
             student_skills,
             target_skills
         )
 
-        # Convert to DataFrame
         df = pd.DataFrame(gap_results)
 
 
         # --------------------------------------------------
-        # STUDENT INFORMATION
+        # SAVE RESULTS IN SESSION STATE
         # --------------------------------------------------
+
+        st.session_state["gap_results"] = gap_results
+        st.session_state["student_name"] = name
+        st.session_state["branch"] = branch
+        st.session_state["year"] = year
+        st.session_state["target_role"] = target_role
+
+
+# --------------------------------------------------
+# DISPLAY RESULTS
+# --------------------------------------------------
+
+if "gap_results" in st.session_state:
+
+    gap_results = st.session_state["gap_results"]
+    name = st.session_state["student_name"]
+    branch = st.session_state["branch"]
+    year = st.session_state["year"]
+    target_role = st.session_state["target_role"]
+
+    df = pd.DataFrame(gap_results)
+
+
+    # --------------------------------------------------
+    # STUDENT INFORMATION
+    # --------------------------------------------------
+
+    st.success(
+        f"Hello {name}! Here is your skill-gap analysis "
+        f"for the {target_role} role."
+    )
+
+    st.write(
+        f"**Branch:** {branch}  \n"
+        f"**Year:** {year}  \n"
+        f"**Target Role:** {target_role}"
+    )
+
+
+    # --------------------------------------------------
+    # SUMMARY
+    # --------------------------------------------------
+
+    st.header("📊 Skill Gap Summary")
+
+    total_skills = len(df)
+
+    strong_skills = len(
+        df[df["Status"] == "Strong"]
+    )
+
+    major_gaps = len(
+        df[df["Status"] == "Major Gap"]
+    )
+
+    moderate_gaps = len(
+        df[df["Status"] == "Moderate Gap"]
+    )
+
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Total Skills",
+        total_skills
+    )
+
+    col2.metric(
+        "Strong Skills",
+        strong_skills
+    )
+
+    col3.metric(
+        "Moderate Gaps",
+        moderate_gaps
+    )
+
+    col4.metric(
+        "Major Gaps",
+        major_gaps
+    )
+
+
+    # --------------------------------------------------
+    # SKILL GAP TABLE
+    # --------------------------------------------------
+
+    st.header("📋 Detailed Skill Gap")
+
+    st.dataframe(
+        df,
+        use_container_width=True
+    )
+
+
+    # --------------------------------------------------
+    # TOP SKILLS TO LEARN
+    # --------------------------------------------------
+
+    st.header("🔥 Most Important Skills to Learn")
+
+    top_gaps = (
+        df[df["Gap"] > 0]
+        .sort_values(
+            by=["Importance", "Gap"],
+            ascending=False
+        )
+        .head(5)
+    )
+
+
+    if top_gaps.empty:
 
         st.success(
-            f"Hello {name}! Here is your skill-gap analysis "
-            f"for the {target_role} role."
+            "🎉 You already have all the required skills!"
         )
 
-        st.write(
-            f"**Branch:** {branch}  \n"
-            f"**Year:** {year}  \n"
-            f"**Target Role:** {target_role}"
-        )
-
-
-        # --------------------------------------------------
-        # SUMMARY
-        # --------------------------------------------------
-
-        st.header("📊 Skill Gap Summary")
-
-        total_skills = len(df)
-
-        strong_skills = len(
-            df[df["Status"] == "Strong"]
-        )
-
-        major_gaps = len(
-            df[df["Status"] == "Major Gap"]
-        )
-
-        moderate_gaps = len(
-            df[df["Status"] == "Moderate Gap"]
-        )
-
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        col1.metric(
-            "Total Skills",
-            total_skills
-        )
-
-        col2.metric(
-            "Strong Skills",
-            strong_skills
-        )
-
-        col3.metric(
-            "Moderate Gaps",
-            moderate_gaps
-        )
-
-        col4.metric(
-            "Major Gaps",
-            major_gaps
-        )
-
-
-        # --------------------------------------------------
-        # SKILL GAP TABLE
-        # --------------------------------------------------
-
-        st.header("📋 Detailed Skill Gap")
-
-        st.dataframe(
-            df,
-            use_container_width=True
-        )
-
-
-        # --------------------------------------------------
-        # TOP SKILLS TO LEARN
-        # --------------------------------------------------
-
-        st.header("🔥 Most Important Skills to Learn")
-
-        top_gaps = df[df["Gap"] > 0].head(5)
+    else:
 
         for _, row in top_gaps.iterrows():
 
@@ -232,41 +277,44 @@ if st.button(
             )
 
             st.progress(
-                min(row["Gap"] / 10, 1.0)
+                min(float(row["Gap"]) / 10, 1.0)
             )
 
 
-        # --------------------------------------------------
-        # ROADMAP
-        # --------------------------------------------------
+    # --------------------------------------------------
+    # RULE-BASED ROADMAP
+    # --------------------------------------------------
 
-        st.header("🗺️ Personalized Learning Roadmap")
+    st.header("🗺️ Personalized Learning Roadmap")
 
-        roadmap = generate_roadmap(
-            gap_results
+    roadmap = generate_roadmap(
+        gap_results
+    )
+
+    roadmap_df = pd.DataFrame(
+        roadmap
+    )
+
+
+    if not roadmap_df.empty:
+
+        st.dataframe(
+            roadmap_df,
+            use_container_width=True
         )
 
-        roadmap_df = pd.DataFrame(
-            roadmap
+    else:
+
+        st.success(
+            "🎉 You already have all the required skills!"
         )
 
-        if not roadmap_df.empty:
 
-            st.dataframe(
-                roadmap_df,
-                use_container_width=True
-            )
+    # --------------------------------------------------
+    # RECOMMENDED LEARNING ORDER
+    # --------------------------------------------------
 
-        else:
-
-            st.success(
-                "🎉 You already have all the required skills!"
-            )
-
-
-        # --------------------------------------------------
-        # RECOMMENDED ORDER
-        # --------------------------------------------------
+    if roadmap:
 
         st.header("📚 Recommended Learning Order")
 
@@ -285,3 +333,45 @@ if st.button(
             )
 
             st.divider()
+
+
+    # --------------------------------------------------
+    # GEMINI AI CAREER ADVISOR
+    # --------------------------------------------------
+
+    st.header("🤖 AI Career Advisor")
+
+    st.write(
+        "Get personalized career guidance using Gemini "
+        "based on your skill-gap analysis."
+    )
+
+
+    if st.button(
+        "✨ Generate AI Career Advice",
+        use_container_width=True
+    ):
+
+        with st.spinner(
+            "🤖 Gemini is analyzing your profile..."
+        ):
+
+            try:
+
+                ai_advice = generate_ai_advice(
+                    name=name,
+                    branch=branch,
+                    year=year,
+                    target_role=target_role,
+                    gap_results=gap_results
+                )
+
+                st.markdown(
+                    ai_advice
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Gemini Error: {e}"
+                )
